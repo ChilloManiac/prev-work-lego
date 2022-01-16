@@ -17,5 +17,3 @@ Rust client that allows for seeing weather reports within a terminal
 Contains an article i wrote for the IT-Minds techblog: [link](https://dev.to/itminds/enhancing-safety-by-embracing-types-548p). Recommend reading on the blog, but i've included the markdown file used in this directory.
 The article is an explanation of how types in TypeScript can be used, in order to decrease runtime errors, and generally exploring the possibilities using types.
 
-
-# prev-work-lego

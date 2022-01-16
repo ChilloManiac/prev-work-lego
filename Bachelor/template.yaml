@@ -1,0 +1,770 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Serverless gallery sharing service
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: dotnetcore3.1
+    MemorySize: 256
+
+Parameters:
+  AuthDomainName:
+    Type: String
+    Default: imguin
+
+Mappings:
+  Constants:
+    Cors:
+      Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-requested-with'"
+      Origin: "'*'"
+      Methods: "'OPTIONS,POST,GET,PUT,DELETE,PATCH'"
+      DefaultResponse: '{"message": $context.error.messageString }'
+
+Resources:
+  GetGalleryImages:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GetGalleryImages/
+      Handler: GetGalleryImages::GetGalleryImages.GetGalleryImagesFunction::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+          ImageThumbnailBucket: !Ref ThumbnailBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+        - S3CrudPolicy:
+            BucketName: !Ref ThumbnailBucket
+      Events:
+        GetGalleryImages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}/images
+            Method: get
+  GetGalleryImage:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GetGalleryImage/
+      Handler: GetGalleryImage::GetGalleryImage.GetGalleryImageFunction::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+          ImageBucket: !Ref ImageBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+      Events:
+        GetGalleryImage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}/images/{imageId}
+            Method: get
+  DeleteImages:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/DeleteImages/
+      Handler: DeleteImages::GalleryService.DeleteImages::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+          ImageBucket: !Ref ImageBucket
+          ThumbnailBucket: !Ref ThumbnailBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+        - S3CrudPolicy:
+            BucketName: !Ref ThumbnailBucket
+      Events:
+        DeleteImages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}/images
+            Method: post
+  GetGalleryCompletedImages:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GetCompletedGalleryImages/
+      Handler: GetCompletedGalleryImages::GalleryService.GetCompletedGalleryImages::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+          ImageBucket: !Ref ImageBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+      Events:
+        GetGalleryCompletedImages:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}/download
+            Method: get
+  CreateGallery:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/CreateGallery/
+      Handler: CreateGallery::CreateGallery.CreateGalleryFunction::FunctionHandler
+      Environment:
+        Variables:
+          TableName: !Ref GalleryDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+      Events:
+        CreateGallery:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery
+            Method: post
+  GalleryScanner:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GalleryScanner/
+      Handler: GalleryScanner::GalleryScanner.GalleryScannerFunction::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+          ImageThumbnailBucket: !Ref ThumbnailBucket
+          ImageBucket: !Ref ImageBucket
+          GalleryCompletionCheckerLambda: !Ref GalleryCompletionChecker
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+        - S3CrudPolicy:
+            BucketName: !Ref ThumbnailBucket
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+        - LambdaInvokePolicy:
+            FunctionName: !Ref GalleryCompletionChecker
+      Events:
+        GalleryScannerEvent:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 0 * * ? *)
+  DeleteGallery:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/DeleteGallery/
+      Handler: DeleteGallery::DeleteGallery.DeleteGalleryFunction::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+          ImageThumbnailBucket: !Ref ThumbnailBucket
+          ImageBucket: !Ref ImageBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+        - S3CrudPolicy:
+            BucketName: !Ref ThumbnailBucket
+        - S3CrudPolicy:
+            BucketName: !Ref ImageBucket
+      Events:
+        DeleteGallery:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}
+            Method: delete
+  GetGalleries:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GetGalleries/
+      Handler: GetGalleries::GalleryService.GetGalleries::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+      Events:
+        GetGalleries:
+            Type: Api
+            Properties:
+              RestApiId: !Ref APIGateway
+              Path: /gallery
+              Method: get
+  GetGallery:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GetGallery/
+      Handler: GetGallery::GetGallery.GetGalleryFunction::FunctionHandler
+      Environment:
+        Variables:
+          TableName: !Ref GalleryDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+      Events:
+        GetGallery:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Auth:
+              Authorizer: NONE
+            Path: /gallery/{galleryId}
+            Method: get
+  AddMember:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/AddMember/
+      Handler: AddMember::AddMember.AddMemberFunction::FunctionHandler
+      Environment:
+        Variables:
+          TableName: !Ref GalleryDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+      Events:
+        AddMember:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}/member
+            Method: put
+
+  SetGalleryPending:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/SetGalleryPending/
+      Handler: SetGalleryPending::GalleryService.SetGalleryPending::FunctionHandler
+      Environment:
+        Variables:
+          TableName: !Ref GalleryDB
+          GalleryCompletionCheckerLambda: !Ref GalleryCompletionChecker
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - LambdaInvokePolicy:
+            FunctionName: !Ref GalleryCompletionChecker
+      Events:
+        AddMember:
+          Type: Api
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /gallery/{galleryId}/setPending
+            Method: put
+
+  GalleryCompletionChecker:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/GalleryCompletionChecker/
+      Handler: GalleryCompletionChecker::GalleryService.GalleryCompletionChecker::FunctionHandler
+      Timeout: 120
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+
+  UploadImageAllowed:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/UploadImageAllowed/
+      Handler: UploadImageAllowed::GalleryService.UploadImageAllowed::FunctionHandler
+      Environment:
+        Variables:
+          GalleryTable: !Ref GalleryDB
+          ImageTable: !Ref ImageDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GalleryDB
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+
+
+  SetImageCompleted:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/GalleryService/SetImageCompleted/
+      Handler: SetImageCompleted::GalleryService.SetImageCompleted::FunctionHandler
+      Environment:
+        Variables:
+          ImageTable: !Ref ImageDB
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ImageDB
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref ImageBucket
+            Events: s3:ObjectCreated:*
+
+  ValidateImage:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/Image-Pipeline/ValidateImage/
+      Handler: ValidateImage::ImagePipeline.ValidateImage.ValidateImage::FunctionHandler
+      Policies: 
+        - SQSSendMessagePolicy:
+            QueueName: !Sub 
+              - "FanoutQueue_${Domain}"
+              - Domain: !Ref AuthDomainName
+        - SQSSendMessagePolicy:
+            QueueName: !Sub 
+              - "ResizeQueue_${Domain}"
+              - Domain: !Ref AuthDomainName
+        - S3CrudPolicy:
+            BucketName: !Ref MessageBucket
+        - LambdaInvokePolicy:
+            FunctionName: !Ref UploadImageAllowed
+      Environment:
+        Variables:
+          FONTCONFIG_PATH: /opt/lib/etc
+          ResizeQueue: !Ref ResizeQueue
+          ConsumerQueue: !Ref FanoutQueue
+          MessageBucket: !Ref MessageBucket
+          UploadAllowedLambda: !Ref UploadImageAllowed
+          
+      MemorySize: 512
+      Events:
+        ValidatePost:
+          Type: Api 
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /imagePipeline/upload
+            Method: post
+
+  ResizeImageLambda:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/Image-Pipeline/ResizeImage/
+      Handler: ResizeImage::ImagePipeline.ResizeImage.ResizeImage::FunctionHandler
+      Policies: 
+        - SQSSendMessagePolicy:
+            QueueName: !Sub 
+              - "FanoutQueue_${Domain}"
+              - Domain: !Ref AuthDomainName
+        - S3CrudPolicy:
+            BucketName: !Ref MessageBucket
+      Environment:
+        Variables:
+          FONTCONFIG_PATH: /opt/lib/etc
+          ConsumerQueue: !Ref FanoutQueue
+          MessageBucket: !Ref MessageBucket
+      MemorySize: 1024
+      Events:
+        SaveImageEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ResizeQueue.Arn
+            BatchSize: 10
+
+  FanoutLambda:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/Image-Pipeline/Fanout/
+      Handler: Fanout::ImagePipeline.Fanout.Fanout::FunctionHandler
+      Policies: 
+        - SQSSendMessagePolicy:
+            QueueName: !Sub 
+              - "SaveQueue_${Domain}"
+              - Domain: !Ref AuthDomainName
+        - SQSSendMessagePolicy:
+            QueueName: !Sub 
+              - "ThumbnailQueue_${Domain}"
+              - Domain: !Ref AuthDomainName
+        - S3CrudPolicy:
+            BucketName: !Ref MessageBucket
+      Environment:
+        Variables:
+          MessageBucket: !Ref MessageBucket
+          FanoutQueues: !Sub
+            - "${First},${Second}"
+            - First: !Ref SaveQueue
+              Second: !Ref ThumbnailQueue
+      Events:
+        SaveImageEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt FanoutQueue.Arn
+            BatchSize: 10
+
+  GenerateThumbnail:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/Image-Pipeline/GenerateThumbnail/
+      Handler: GenerateThumbnail::ImagePipeline.GenerateThumbnail.GenerateThumbnail::FunctionHandler
+      Policies: 
+        - SQSSendMessagePolicy:
+            QueueName: !Sub 
+              - "ThumbnailSaveQueue_${Domain}"
+              - Domain: !Ref AuthDomainName
+        - S3CrudPolicy:
+            BucketName: !Ref MessageBucket
+      Environment:
+        Variables:
+          FONTCONFIG_PATH: /opt/lib/etc
+          ConsumerQueue: !Ref ThumbnailSaveQueue
+          MessageBucket: !Ref MessageBucket
+      Events:
+        SaveImageEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ThumbnailQueue.Arn
+            BatchSize: 10
+
+  SaveImage:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/Image-Pipeline/SaveImage/
+      Handler: SaveImage::ImagePipeline.SaveImage.SaveImage::FunctionHandler
+      Policies: 
+        - S3WritePolicy:
+            BucketName: !Ref ImageBucket
+        - S3CrudPolicy:
+            BucketName: !Ref MessageBucket
+      Environment:
+        Variables:
+          ImageBucket: !Ref ImageBucket
+      Events:
+        SaveImageEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SaveQueue.Arn
+            BatchSize: 10
+
+  SaveThumbnailLambda:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/Image-Pipeline/SaveImage/
+      Handler: SaveImage::ImagePipeline.SaveImage.SaveImage::FunctionHandler
+      Policies: 
+        - S3WritePolicy:
+            BucketName: !Ref ThumbnailBucket
+        - S3CrudPolicy:
+            BucketName: !Ref MessageBucket
+      Environment:
+        Variables:
+          ImageBucket: !Ref ThumbnailBucket
+      Events:
+        SaveImageEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ThumbnailSaveQueue.Arn
+            BatchSize: 10
+            
+            
+  # User service
+  GenerateEmailConfirmation:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/UserService/UserInfrastructure
+      Handler: UserInfrastructure::UserInfrastructure.GenerateEmailConfirmationFunction::FunctionHandler
+      Environment:
+        Variables:
+          ApiName: !Sub "${AuthDomainName}-api"
+          ApiRegion: !Ref AWS::Region
+      Policies:
+        - Version: "2012-10-17"
+          Statement: 
+            - Effect: Allow
+              Action: "apigateway:GET"
+              Resource: "arn:aws:apigateway:*::/restapis"
+      Events:
+        CustomSignup:
+          Type: Cognito
+          Properties:
+            UserPool: !Ref CognitoUserPool
+            Trigger: CustomMessage
+            
+  ConfirmUserEmail:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./src/UserService/UserInfrastructure
+      Handler: UserInfrastructure::UserInfrastructure.ConfirmUserFunction::FunctionHandler
+      Environment:
+        Variables:
+          ClientName: !Sub "${AuthDomainName}-client"
+      Policies:
+        - Version: "2012-10-17"
+          Statement: 
+            - Effect: Allow
+              Action: 
+              - "amplify:ListDomainAssociations"
+              - "amplify:ListApps"
+              Resource: "*"
+      Events:
+        ValidatePost:
+          Type: Api 
+          Properties:
+            RestApiId: !Ref APIGateway
+            Path: /user/confirmEmail
+            Method: get
+            Auth:
+              Authorizer: NONE
+    
+
+  # Images in this queue are about to be saved
+  SaveQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 
+        - "SaveQueue_${Domain}"
+        - Domain: !Ref AuthDomainName
+      ReceiveMessageWaitTimeSeconds: 5
+            
+  # Images to make thumbnails from
+  ThumbnailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub
+        - "ThumbnailQueue_${Domain}"
+        - Domain: !Ref AuthDomainName
+      ReceiveMessageWaitTimeSeconds: 5
+  
+  # Thumbnails about to be saved
+  ThumbnailSaveQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 
+        - "ThumbnailSaveQueue_${Domain}"
+        - Domain: !Ref AuthDomainName
+      ReceiveMessageWaitTimeSeconds: 5
+
+  # Images that should be resized
+  ResizeQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 
+        - "ResizeQueue_${Domain}"
+        - Domain: !Ref AuthDomainName
+      ReceiveMessageWaitTimeSeconds: 5
+
+  FanoutQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 
+        - "FanoutQueue_${Domain}"
+        - Domain: !Ref AuthDomainName
+      ReceiveMessageWaitTimeSeconds: 5
+      
+  # Bucket for storing temporary messages with SQS
+  MessageBucket:
+    Type: AWS::S3::Bucket
+
+  # Bucket for images in the galleries
+  ImageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules: 
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+    
+  # Bucket for thumbnails in the galleries (Exact same path as images)
+  ThumbnailBucket:
+    Type: AWS::S3::Bucket
+    
+  GalleryDB:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: Id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: Id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  ImageDB:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: Id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: Id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: imguin-userpool
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: true
+      VerificationMessageTemplate: 
+        DefaultEmailOption: CONFIRM_WITH_CODE
+      AutoVerifiedAttributes: 
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 6
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          RequireUppercase: false
+
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties: 
+      Domain: !Ref AuthDomainName
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: imguin-userpool-client
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  APIGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${AuthDomainName}-api"
+      StageName: Prod
+      Cors: 
+        AllowMethods: "'*'"
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
+            Identity:
+              Header: Authorization
+        AddDefaultAuthorizerToCorsPreflight: false
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseTemplates:
+            "application/json": !FindInMap [Constants, Cors, DefaultResponse]
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Headers: !FindInMap [Constants, Cors, Headers]
+              Access-Control-Allow-Origin: !FindInMap [Constants, Cors, Origin]
+              Access-Control-Allow-Methods: !FindInMap [Constants, Cors, Methods]
+        DEFAULT_5XX:
+          ResponseTemplates:
+            "application/json": !FindInMap [Constants, Cors, DefaultResponse]
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Headers: !FindInMap [Constants, Cors, Headers]
+              Access-Control-Allow-Origin: !FindInMap [Constants, Cors, Origin]
+              Access-Control-Allow-Methods: !FindInMap [Constants, Cors, Methods]
+
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - amplify.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Amplify
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "amplify:*"
+                Resource: "*"
+
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+      Name: !Sub "${AuthDomainName}-client"
+      AccessToken: # Hidden for privacy
+      Repository: # Hidden for privacy
+      EnvironmentVariables:
+          - Name: AMPLIFY_CONFIG_REGION
+            Value: !Sub ${AWS::Region}
+          - Name: AMPLIFY_CONFIG_USERPOOL_ID
+            Value: !Ref CognitoUserPool
+          - Name: AMPLIFY_CONFIG_AUTHENTICATION_FLOW_TYPE
+            Value: USER_PASSWORD_AUTH
+          - Name: AMPLIFY_CONFIG_USERPOOL_WEBCLIENT_ID
+            Value: !Ref CognitoUserPoolClient
+          - Name: CONFIG_API_ROOT_URL
+            Value: !Sub "https://${APIGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+          - Name: CONFIG_AUTHORIZATION_HEADER_KEY
+            Value: Authorization
+      CustomRules: 
+        - Source: </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>
+          Status: 200
+          Target: /index.html
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+      EnableAutoBuild: true
+      EnablePullRequestPreview: true
+
+          
+Outputs:
+  AmplifyConfigRegion:
+    Description: AMPLIFY_CONFIG_REGION
+    Value: !Sub ${AWS::Region}
+  AmplifyConfigUserpoolId:
+    Description: AMPLIFY_CONFIG_USERPOOL_ID
+    Value: !Ref CognitoUserPool
+  AmplifyConfigAuthenticationFlowType:
+    Description: AMPLIFY_CONFIG_AUTHENTICATION_FLOW_TYPE
+    Value: USER_PASSWORD_AUTH
+  AmplifyConfigUserpoolWebclientId:
+    Description: AMPLIFY_CONFIG_USERPOOL_WEBCLIENT_ID
+    Value: !Ref CognitoUserPoolClient
+  ConfigApiRootUrl:
+    Description: CONFIG_API_ROOT_URL
+    Value: !Sub "https://${APIGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  ConfigAuthorizationHeaderKey:
+    Description: CONFIG_AUTHORIZATION_HEADER_KEY
+    Value: Authorization
