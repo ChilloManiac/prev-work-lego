@@ -18,3 +18,4 @@ Contains an article i wrote for the IT-Minds techblog: [link](https://dev.to/itm
 The article is an explanation of how types in TypeScript can be used, in order to decrease runtime errors, and generally exploring the possibilities using types.
 
 
+# prev-work-lego
